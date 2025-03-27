@@ -1,0 +1,15 @@
+package graph
+
+import (
+	"ozon-test/graph/model"
+)
+
+// This file will not be regenerated automatically.
+//
+// It serves as dependency injection for your app, add any dependencies you require here.
+
+type Resolver struct {
+	authors  []*model.Author
+	comments []*model.Comment
+	posts    []*model.Post
+}
