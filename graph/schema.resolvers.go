@@ -6,6 +6,7 @@ package graph
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"ozon-test/graph/model"
@@ -14,7 +15,7 @@ import (
 )
 
 // Checks if list is Slice or Array and contains structs with ID field and validate that field.
-func validate(list interface{}, id string) bool {
+func validateLocal(list interface{}, id string) bool {
 	val := reflect.ValueOf(list)
 	if val.Kind() != reflect.Slice && val.Kind() != reflect.Array {
 		return false
@@ -40,11 +41,30 @@ func validate(list interface{}, id string) bool {
 	return false
 }
 
+func secureAuthor(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS authors (
+			id SERIAL PRIMARY KEY,
+			username VARCHAR(50) NOT NULL
+		);
+	`)
+
+	return err
+}
+
+func securePost(db *sql.DB) {
+
+}
+
+func secureComment(db *sql.DB) {
+
+}
+
 // CreatePost is the resolver for the createPost field.
 func (r *mutationResolver) CreatePost(ctx context.Context, input model.NewPost) (*model.Post, error) {
 	switch r.Storage {
 	case InMemory:
-		if !validate(r.authors, input.Author) {
+		if !validateLocal(r.authors, input.Author) {
 			return nil, errors.New("no valid author found")
 		}
 
@@ -69,11 +89,11 @@ func (r *mutationResolver) CreatePost(ctx context.Context, input model.NewPost) 
 func (r *mutationResolver) CreateComment(ctx context.Context, input model.NewComment) (*model.Comment, error) {
 	switch r.Storage {
 	case InMemory:
-		if !validate(r.authors, input.Author) {
+		if !validateLocal(r.authors, input.Author) {
 			return nil, errors.New("no valid author found")
-		} else if !validate(r.posts, input.PostID) {
+		} else if !validateLocal(r.posts, input.PostID) {
 			return nil, errors.New("no valid author found")
-		} else if input.ParentID != nil && !validate(r.comments, *input.ParentID) {
+		} else if input.ParentID != nil && !validateLocal(r.comments, *input.ParentID) {
 			return nil, errors.New("no valid author found")
 		}
 
@@ -103,8 +123,28 @@ func (r *mutationResolver) CreateAuthor(ctx context.Context, input model.NewAuth
 		}
 		r.authors = append(r.authors, author)
 		return author, nil
+
 	case Postgres:
-		return nil, nil
+		err := secureAuthor(r.Connection)
+		if err != nil {
+			return nil, err
+		}
+
+		rows, err := r.Connection.Query(`INSERT INTO authors (username) values ($1) RETURNING *;`, input.Username)
+		if err != nil {
+			return nil, err
+		}
+
+		defer rows.Close()
+		var author model.Author
+		for rows.Next() {
+			err = rows.Scan(&author.ID, &author.Username)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return &author, nil
+
 	default:
 		return nil, nil
 	}

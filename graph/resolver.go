@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"database/sql"
 	"ozon-test/graph/model"
 )
 
@@ -16,8 +17,9 @@ const (
 )
 
 type Resolver struct {
-	Storage  Storage
-	authors  []*model.Author
-	comments []*model.Comment
-	posts    []*model.Post
+	Storage    Storage
+	Connection *sql.DB
+	authors    []*model.Author
+	comments   []*model.Comment
+	posts      []*model.Post
 }

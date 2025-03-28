@@ -1,6 +1,8 @@
 package main
 
 import (
+	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -11,10 +13,19 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/lru"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
+	_ "github.com/lib/pq"
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
 const defaultPort = "8080"
+const storageType = graph.Postgres
+const (
+	dbhost     = "db"
+	dbport     = 5432
+	dbuser     = "postgres"
+	dbpassword = "123"
+	dbname     = "postgres"
+)
 
 func main() {
 	port := os.Getenv("PORT")
@@ -22,7 +33,19 @@ func main() {
 		port = defaultPort
 	}
 
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{Storage: graph.InMemory}}))
+	var db *sql.DB = nil
+	var err error = nil
+	if storageType == graph.Postgres {
+		psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", dbhost, dbport, dbuser, dbpassword, dbname)
+
+		db, err = sql.Open("postgres", psqlconn)
+		if err != nil {
+			panic(err)
+		}
+		defer db.Close()
+	}
+
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{Storage: storageType, Connection: db}}))
 
 	srv.AddTransport(transport.Options{})
 	srv.AddTransport(transport.GET{})
