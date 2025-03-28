@@ -14,7 +14,7 @@ import (
 )
 
 // Checks if list is Slice or Array and contains structs with ID field and validate that field.
-func validate(list interface{}, id string) bool {
+func validateLocal(list interface{}, id string) bool {
 	val := reflect.ValueOf(list)
 	if val.Kind() != reflect.Slice && val.Kind() != reflect.Array {
 		return false
@@ -42,51 +42,72 @@ func validate(list interface{}, id string) bool {
 
 // CreatePost is the resolver for the createPost field.
 func (r *mutationResolver) CreatePost(ctx context.Context, input model.NewPost) (*model.Post, error) {
-	if !validate(r.authors, input.Author) {
-		return nil, errors.New("no valid author found")
-	}
+	switch r.Storage {
+	case InMemory:
+		if !validateLocal(r.authors, input.Author) {
+			return nil, errors.New("no valid author found")
+		}
 
-	post := &model.Post{
-		ID:              fmt.Sprintf("%d", len(r.posts)+1),
-		Title:           input.Title,
-		Content:         input.Content,
-		Author:          input.Author,
-		CommentsEnabled: input.CommentsEnabled,
-		CreatedAt:       time.Now().GoString(),
+		post := &model.Post{
+			ID:              fmt.Sprintf("%d", len(r.posts)+1),
+			Title:           input.Title,
+			Content:         input.Content,
+			Author:          input.Author,
+			CommentsEnabled: input.CommentsEnabled,
+			CreatedAt:       time.Now().GoString(),
+		}
+		r.posts = append(r.posts, post)
+		return post, nil
+	case Postgres:
+		return nil, nil
+	default:
+		return nil, nil
 	}
-	r.posts = append(r.posts, post)
-	return post, nil
 }
 
 // CreateComment is the resolver for the createComment field.
 func (r *mutationResolver) CreateComment(ctx context.Context, input model.NewComment) (*model.Comment, error) {
-	if !validate(r.authors, input.Author) {
-		return nil, errors.New("no valid author found")
-	} else if !validate(r.posts, input.PostID) {
-		return nil, errors.New("no valid author found")
-	} else if input.ParentID != nil && !validate(r.comments, *input.ParentID) {
-		return nil, errors.New("no valid author found")
-	}
+	switch r.Storage {
+	case InMemory:
+		if !validateLocal(r.authors, input.Author) {
+			return nil, errors.New("no valid author found")
+		} else if !validateLocal(r.posts, input.PostID) {
+			return nil, errors.New("no valid author found")
+		} else if input.ParentID != nil && !validateLocal(r.comments, *input.ParentID) {
+			return nil, errors.New("no valid author found")
+		}
 
-	comment := &model.Comment{
-		ID:       fmt.Sprintf("%d", len(r.comments)+1),
-		Content:  input.Content,
-		Author:   input.Author,
-		PostID:   input.PostID,
-		ParentID: input.ParentID,
+		comment := &model.Comment{
+			ID:       fmt.Sprintf("%d", len(r.comments)+1),
+			Content:  input.Content,
+			Author:   input.Author,
+			PostID:   input.PostID,
+			ParentID: input.ParentID,
+		}
+		r.comments = append(r.comments, comment)
+		return comment, nil
+	case Postgres:
+		return nil, nil
+	default:
+		return nil, nil
 	}
-	r.comments = append(r.comments, comment)
-	return comment, nil
 }
 
 // CreateAuthor is the resolver for the createAuthor field.
 func (r *mutationResolver) CreateAuthor(ctx context.Context, input model.NewAuthor) (*model.Author, error) {
-	author := &model.Author{
-		ID:       fmt.Sprintf("%d", len(r.authors)+1),
-		Username: input.Username,
+	switch r.Storage {
+	case InMemory:
+		author := &model.Author{
+			ID:       fmt.Sprintf("%d", len(r.authors)+1),
+			Username: input.Username,
+		}
+		r.authors = append(r.authors, author)
+		return author, nil
+	case Postgres:
+		return nil, nil
+	default:
+		return nil, nil
 	}
-	r.authors = append(r.authors, author)
-	return author, nil
 }
 
 // Posts is the resolver for the posts field.

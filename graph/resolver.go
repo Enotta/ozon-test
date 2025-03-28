@@ -8,7 +8,15 @@ import (
 //
 // It serves as dependency injection for your app, add any dependencies you require here.
 
+type Storage byte
+
+const (
+	InMemory Storage = 0
+	Postgres Storage = 1
+)
+
 type Resolver struct {
+	Storage  Storage
 	authors  []*model.Author
 	comments []*model.Comment
 	posts    []*model.Post
