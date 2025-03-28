@@ -14,7 +14,7 @@ import (
 )
 
 // Checks if list is Slice or Array and contains structs with ID field and validate that field.
-func validateLocal(list interface{}, id string) bool {
+func validate(list interface{}, id string) bool {
 	val := reflect.ValueOf(list)
 	if val.Kind() != reflect.Slice && val.Kind() != reflect.Array {
 		return false
@@ -44,7 +44,7 @@ func validateLocal(list interface{}, id string) bool {
 func (r *mutationResolver) CreatePost(ctx context.Context, input model.NewPost) (*model.Post, error) {
 	switch r.Storage {
 	case InMemory:
-		if !validateLocal(r.authors, input.Author) {
+		if !validate(r.authors, input.Author) {
 			return nil, errors.New("no valid author found")
 		}
 
@@ -69,11 +69,11 @@ func (r *mutationResolver) CreatePost(ctx context.Context, input model.NewPost) 
 func (r *mutationResolver) CreateComment(ctx context.Context, input model.NewComment) (*model.Comment, error) {
 	switch r.Storage {
 	case InMemory:
-		if !validateLocal(r.authors, input.Author) {
+		if !validate(r.authors, input.Author) {
 			return nil, errors.New("no valid author found")
-		} else if !validateLocal(r.posts, input.PostID) {
+		} else if !validate(r.posts, input.PostID) {
 			return nil, errors.New("no valid author found")
-		} else if input.ParentID != nil && !validateLocal(r.comments, *input.ParentID) {
+		} else if input.ParentID != nil && !validate(r.comments, *input.ParentID) {
 			return nil, errors.New("no valid author found")
 		}
 
