@@ -163,15 +163,31 @@ func (r *mutationResolver) CreateComment(ctx context.Context, input model.NewCom
 			return nil, errors.New("no valid author found")
 		}
 
-		comment := &model.Comment{
-			ID:       fmt.Sprintf("%d", len(r.comments)+1),
-			Content:  input.Content,
-			Author:   input.Author,
-			PostID:   input.PostID,
-			ParentID: input.ParentID,
+		commentsEnabled := true
+		for i := 0; i < len(r.posts); i++ {
+			if input.PostID == r.posts[i].ID {
+				if !r.posts[i].CommentsEnabled {
+					commentsEnabled = false
+				}
+
+				break
+			}
 		}
-		r.comments = append(r.comments, comment)
-		return comment, nil
+
+		var comment model.Comment
+		if commentsEnabled {
+			comment = model.Comment{
+				ID:        fmt.Sprintf("%d", len(r.comments)+1),
+				Content:   input.Content,
+				Author:    input.Author,
+				PostID:    input.PostID,
+				ParentID:  input.ParentID,
+				CreatedAt: time.Now().GoString(),
+			}
+			r.comments = append(r.comments, &comment)
+		}
+
+		return &comment, nil
 
 	case Postgres:
 		err := secureAuthor(r.Connection)
