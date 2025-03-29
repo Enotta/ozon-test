@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"ozon-test/graph/model"
 	"reflect"
+	"strconv"
 	"time"
 )
 
@@ -52,12 +53,35 @@ func secureAuthor(db *sql.DB) error {
 	return err
 }
 
-func securePost(db *sql.DB) {
+func securePost(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS posts (
+			id SERIAL PRIMARY KEY,
+			title VARCHAR(255) NOT NULL,
+			content VARCHAR(2000) NOT NULL,
+			author INT NOT NULL REFERENCES authors(id),
+			comments_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+			created_at TIMESTAMP
+		);
+	`)
 
+	return err
 }
 
-func secureComment(db *sql.DB) {
+func secureComment(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS comments (
+			id SERIAL PRIMARY KEY,
+			content VARCHAR(2000) NOT NULL,
+			author INT NOT NULL REFERENCES authors(id),
+			post_id INT NOT NULL REFERENCES posts(id),
+			parent_id INT,
+			created_at TIMESTAMP,
+			FOREIGN KEY (parent_id) REFERENCES comments(id)
+		);
+	`)
 
+	return err
 }
 
 // CreatePost is the resolver for the createPost field.
@@ -78,8 +102,50 @@ func (r *mutationResolver) CreatePost(ctx context.Context, input model.NewPost) 
 		}
 		r.posts = append(r.posts, post)
 		return post, nil
+
 	case Postgres:
-		return nil, nil
+		err := secureAuthor(r.Connection)
+		if err != nil {
+			return nil, err
+		}
+		err = securePost(r.Connection)
+		if err != nil {
+			return nil, err
+		}
+
+		author, err := strconv.Atoi(input.Author)
+		if err != nil {
+			return nil, err
+		}
+		rows, err := r.Connection.Query(
+			`INSERT INTO posts (
+				title,
+				content,
+				author,
+				comments_enabled,
+				created_at
+			) 
+			values ($1, $2, $3, $4, $5) RETURNING *;`,
+			input.Title,
+			input.Content,
+			author,
+			input.CommentsEnabled,
+			time.Now(),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		defer rows.Close()
+		var post model.Post
+		for rows.Next() {
+			err = rows.Scan(&post.ID, &post.Title, &post.Content, &post.Author, &post.CommentsEnabled, &post.CreatedAt)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return &post, nil
+
 	default:
 		return nil, nil
 	}
@@ -106,8 +172,106 @@ func (r *mutationResolver) CreateComment(ctx context.Context, input model.NewCom
 		}
 		r.comments = append(r.comments, comment)
 		return comment, nil
+
 	case Postgres:
-		return nil, nil
+		err := secureAuthor(r.Connection)
+		if err != nil {
+			return nil, err
+		}
+		err = secureComment(r.Connection)
+		if err != nil {
+			return nil, err
+		}
+		err = securePost(r.Connection)
+		if err != nil {
+			return nil, err
+		}
+
+		author, err := strconv.Atoi(input.Author)
+		if err != nil {
+			return nil, err
+		}
+		post_id, err := strconv.Atoi(input.PostID)
+		if err != nil {
+			return nil, err
+		}
+		parent_id := 0
+		if input.ParentID != nil {
+			parent_id, err = strconv.Atoi(*input.ParentID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if parent_id == 0 {
+			rows, err := r.Connection.Query(
+				`INSERT INTO comments (content, author, post_id, parent_id, created_at)
+				SELECT 
+					$1,
+					$2,
+					$3,
+					$4,
+					$5
+				FROM posts
+				WHERE 
+					id = $6
+					AND comments_enabled = TRUE 
+				RETURNING *;`,
+				input.Content,
+				author,
+				post_id,
+				nil,
+				time.Now(),
+				post_id,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			defer rows.Close()
+			var comment model.Comment
+			for rows.Next() {
+				err = rows.Scan(&comment.ID, &comment.Content, &comment.Author, &comment.PostID, &comment.ParentID, &comment.CreatedAt)
+				if err != nil {
+					return nil, err
+				}
+			}
+			return &comment, nil
+		} else {
+			rows, err := r.Connection.Query(
+				`INSERT INTO comments (content, author, post_id, parent_id, created_at)
+				SELECT 
+					$1,
+					$2,
+					$3,
+					$4,
+					$5
+				FROM posts
+				WHERE 
+					id = $6
+					AND comments_enabled = TRUE 
+				RETURNING *;`,
+				input.Content,
+				author,
+				post_id,
+				parent_id,
+				time.Now(),
+				post_id,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			defer rows.Close()
+			var comment model.Comment
+			for rows.Next() {
+				err = rows.Scan(&comment.ID, &comment.Content, &comment.Author, &comment.PostID, &comment.ParentID, &comment.CreatedAt)
+				if err != nil {
+					return nil, err
+				}
+			}
+			return &comment, nil
+		}
+
 	default:
 		return nil, nil
 	}

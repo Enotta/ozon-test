@@ -18,7 +18,6 @@ import (
 )
 
 const defaultPort = "8080"
-const storageType = graph.Postgres
 const (
 	dbhost     = "db"
 	dbport     = 5432
@@ -31,6 +30,16 @@ func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = defaultPort
+	}
+
+	storageType := graph.InMemory
+	{
+		value, found := os.LookupEnv("COFFEE_STORAGE_TYPE")
+		if found {
+			if value == "POSTGRES" {
+				storageType = graph.Postgres
+			}
+		}
 	}
 
 	var db *sql.DB = nil
