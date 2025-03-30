@@ -32,9 +32,9 @@ func main() {
 		port = defaultPort
 	}
 
-	storageType := graph.InMemory
+	storageType := graph.InMemory // default value
 	{
-		value, found := os.LookupEnv("COFFEE_STORAGE_TYPE")
+		value, found := os.LookupEnv("COFFEE_STORAGE_TYPE") // lookup for docker env value
 		if found {
 			if value == "POSTGRES" {
 				storageType = graph.Postgres

@@ -42,6 +42,7 @@ func validateLocal(list interface{}, id string) bool {
 	return false
 }
 
+// Make sure to have authors table
 func secureAuthor(db *sql.DB) error {
 	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS authors (
@@ -53,6 +54,7 @@ func secureAuthor(db *sql.DB) error {
 	return err
 }
 
+// Make sure to have posts table
 func securePost(db *sql.DB) error {
 	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS posts (
@@ -68,6 +70,7 @@ func securePost(db *sql.DB) error {
 	return err
 }
 
+// Make sure to have comments table
 func secureComment(db *sql.DB) error {
 	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS comments (
@@ -88,6 +91,7 @@ func secureComment(db *sql.DB) error {
 func (r *mutationResolver) CreatePost(ctx context.Context, input model.NewPost) (*model.Post, error) {
 	switch r.Storage {
 	case InMemory:
+		// cant create post if author doesnt exist
 		if !validateLocal(r.authors, input.Author) {
 			return nil, errors.New("no valid author found")
 		}
@@ -155,6 +159,7 @@ func (r *mutationResolver) CreatePost(ctx context.Context, input model.NewPost) 
 func (r *mutationResolver) CreateComment(ctx context.Context, input model.NewComment) (*model.Comment, error) {
 	switch r.Storage {
 	case InMemory:
+		// cant create post if author, post, parent doesnt exist
 		if !validateLocal(r.authors, input.Author) {
 			return nil, errors.New("no valid author found")
 		} else if !validateLocal(r.posts, input.PostID) {
@@ -218,7 +223,7 @@ func (r *mutationResolver) CreateComment(ctx context.Context, input model.NewCom
 				return nil, err
 			}
 		}
-		if parent_id == 0 {
+		if parent_id == 0 { // root comment
 			rows, err := r.Connection.Query(
 				`INSERT INTO comments (content, author, post_id, parent_id, created_at)
 				SELECT 
@@ -252,7 +257,7 @@ func (r *mutationResolver) CreateComment(ctx context.Context, input model.NewCom
 				}
 			}
 			return &comment, nil
-		} else {
+		} else { // reply to any otherr comment
 			rows, err := r.Connection.Query(
 				`INSERT INTO comments (content, author, post_id, parent_id, created_at)
 				SELECT 
