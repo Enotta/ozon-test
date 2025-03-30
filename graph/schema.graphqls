@@ -46,6 +46,7 @@ input NewComment {
 type Query {
   posts: [Post!]!
   post(id: ID!): Post!
+  comments(postId: ID!, parentId: ID): [Comment!]!
 }
 
 type Mutation {

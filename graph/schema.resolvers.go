@@ -10,82 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"ozon-test/graph/model"
-	"reflect"
 	"strconv"
 	"time"
 )
-
-// Checks if list is Slice or Array and contains structs with ID field and validate that field.
-func validateLocal(list interface{}, id string) bool {
-	val := reflect.ValueOf(list)
-	if val.Kind() != reflect.Slice && val.Kind() != reflect.Array {
-		return false
-	}
-
-	for i := 0; i < val.Len(); i++ {
-		elem := val.Index(i)
-
-		if elem.Kind() == reflect.Ptr {
-			elem = elem.Elem()
-		}
-
-		idField := elem.FieldByName("ID")
-		if !idField.IsValid() || idField.Kind() != reflect.String {
-			continue
-		}
-
-		if idField.String() == id {
-			return true
-		}
-	}
-
-	return false
-}
-
-// Make sure to have authors table
-func secureAuthor(db *sql.DB) error {
-	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS authors (
-			id SERIAL PRIMARY KEY,
-			username VARCHAR(50) NOT NULL
-		);
-	`)
-
-	return err
-}
-
-// Make sure to have posts table
-func securePost(db *sql.DB) error {
-	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS posts (
-			id SERIAL PRIMARY KEY,
-			title VARCHAR(255) NOT NULL,
-			content VARCHAR(2000) NOT NULL,
-			author INT NOT NULL REFERENCES authors(id),
-			comments_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-			created_at TIMESTAMP
-		);
-	`)
-
-	return err
-}
-
-// Make sure to have comments table
-func secureComment(db *sql.DB) error {
-	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS comments (
-			id SERIAL PRIMARY KEY,
-			content VARCHAR(2000) NOT NULL,
-			author INT NOT NULL REFERENCES authors(id),
-			post_id INT NOT NULL REFERENCES posts(id),
-			parent_id INT,
-			created_at TIMESTAMP,
-			FOREIGN KEY (parent_id) REFERENCES comments(id)
-		);
-	`)
-
-	return err
-}
 
 // CreatePost is the resolver for the createPost field.
 func (r *mutationResolver) CreatePost(ctx context.Context, input model.NewPost) (*model.Post, error) {
@@ -413,6 +340,82 @@ func (r *queryResolver) Post(ctx context.Context, id string) (*model.Post, error
 			}
 		}
 		return &post, nil
+	default:
+		return nil, nil
+	}
+}
+
+// Comments is the resolver for the comments field.
+func (r *queryResolver) Comments(ctx context.Context, postID string, parentID *string) ([]*model.Comment, error) {
+	switch r.Storage {
+	case InMemory:
+		var comments []*model.Comment
+
+		for i := 0; i < len(r.comments); i++ {
+			if r.comments[i].PostID == postID && r.comments[i].ParentID == parentID {
+				comments = append(comments, r.comments[i])
+			}
+		}
+
+		return comments, nil
+	case Postgres:
+		var comments []*model.Comment
+
+		err := securePost(r.Connection)
+		if err != nil {
+			return nil, err
+		}
+		err = secureComment(r.Connection)
+		if err != nil {
+			return nil, err
+		}
+		err = secureAuthor(r.Connection)
+		if err != nil {
+			return nil, err
+		}
+
+		intPostId, err := strconv.Atoi(postID)
+		if err != nil {
+			return nil, err
+		}
+		intParentId := 0
+		if parentID != nil {
+			intParentId, err = strconv.Atoi(*parentID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		var rows *sql.Rows
+		if parentID == nil {
+			rows, err = r.Connection.Query(
+				`SELECT * FROM comments WHERE post_id = $1 and parent_id is NULL;`,
+				intPostId,
+			)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			rows, err = r.Connection.Query(
+				`SELECT * FROM comments WHERE post_id = $1 and parent_id = $2;`,
+				intPostId,
+				intParentId,
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		defer rows.Close()
+		for rows.Next() {
+			var comment model.Comment
+			err = rows.Scan(&comment.ID, &comment.Content, &comment.Author, &comment.PostID, &comment.ParentID, &comment.CreatedAt)
+			if err != nil {
+				return nil, err
+			}
+
+			comments = append(comments, &comment)
+		}
+		return comments, nil
 	default:
 		return nil, nil
 	}
