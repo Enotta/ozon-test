@@ -337,12 +337,85 @@ func (r *mutationResolver) CreateAuthor(ctx context.Context, input model.NewAuth
 
 // Posts is the resolver for the posts field.
 func (r *queryResolver) Posts(ctx context.Context) ([]*model.Post, error) {
-	panic(fmt.Errorf("not implemented: Posts - posts"))
+	switch r.Storage {
+	case InMemory:
+		return r.posts, nil
+	case Postgres:
+		var posts []*model.Post
+
+		err := securePost(r.Connection)
+		if err != nil {
+			return nil, err
+		}
+
+		rows, err := r.Connection.Query(
+			`SELECT * FROM posts;`,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		defer rows.Close()
+		for rows.Next() {
+			var post model.Post
+			err = rows.Scan(&post.ID, &post.Title, &post.Content, &post.Author, &post.CommentsEnabled, &post.CreatedAt)
+			if err != nil {
+				return nil, err
+			}
+
+			posts = append(posts, &post)
+		}
+		return posts, nil
+	default:
+		return nil, nil
+	}
 }
 
 // Post is the resolver for the post field.
 func (r *queryResolver) Post(ctx context.Context, id string) (*model.Post, error) {
-	panic(fmt.Errorf("not implemented: Post - post"))
+	switch r.Storage {
+	case InMemory:
+		var post *model.Post
+
+		for i := 0; i < len(r.posts); i++ {
+			if r.posts[i].ID == id {
+				post = r.posts[i]
+
+				break
+			}
+		}
+
+		return post, nil
+	case Postgres:
+		err := securePost(r.Connection)
+		if err != nil {
+			return nil, err
+		}
+
+		intId, err := strconv.Atoi(id)
+		if err != nil {
+			return nil, err
+		}
+		rows, err := r.Connection.Query(
+			`SELECT * FROM posts WHERE id = $1;`,
+			intId,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		defer rows.Close()
+		var post model.Post
+		for rows.Next() {
+			err = rows.Scan(&post.ID, &post.Title, &post.Content, &post.Author, &post.CommentsEnabled, &post.CreatedAt)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return &post, nil
+	default:
+		return nil, nil
+	}
 }
 
 // Mutation returns MutationResolver implementation.
